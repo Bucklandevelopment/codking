@@ -1,0 +1,387 @@
+"""
+Training script for CodKing.
+
+Usage:
+    python src/codking/scripts/train.py --config configs/training_config.yaml
+
+Features:
+- PyTorch Lightning training
+- W&B logging
+- Checkpoint management
+- Few-shot learning support
+- Efficiency tracking
+"""
+
+import argparse
+import yaml
+from pathlib import Path
+import torch
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import (
+    ModelCheckpoint,
+    EarlyStopping,
+    LearningRateMonitor,
+    RichProgressBar
+)
+from pytorch_lightning.loggers import WandbLogger
+import wandb
+import sys
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from codking.training.lightning_module import (
+    CodKingLightningModule,
+    CybersecurityLightningModule
+)
+from codking.training.data_module import CodKingDataModule
+
+
+def load_config(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def setup_callbacks(config: dict) -> list:
+    """Setup training callbacks."""
+    callbacks = []
+
+    # Model checkpoint
+    checkpoint_config = config['training']
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=config['paths']['checkpoint_dir'],
+        filename='codking-{epoch:02d}-{val_accuracy:.4f}',
+        monitor=checkpoint_config['monitor'],
+        mode=checkpoint_config['mode'],
+        save_top_k=checkpoint_config['save_top_k'],
+        save_last=True,
+        every_n_epochs=checkpoint_config['save_every_n_epochs'],
+        verbose=True
+    )
+    callbacks.append(checkpoint_callback)
+
+    # Early stopping
+    if checkpoint_config['early_stopping']['enabled']:
+        early_stop_callback = EarlyStopping(
+            monitor=checkpoint_config['early_stopping']['monitor'],
+            patience=checkpoint_config['early_stopping']['patience'],
+            mode=checkpoint_config['early_stopping']['mode'],
+            verbose=True
+        )
+        callbacks.append(early_stop_callback)
+
+    # Learning rate monitor
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    callbacks.append(lr_monitor)
+
+    # Rich progress bar
+    progress_bar = RichProgressBar()
+    callbacks.append(progress_bar)
+
+    return callbacks
+
+
+def setup_logger(config: dict) -> Optional[WandbLogger]:
+    """Setup W&B logger."""
+    wandb_config = config['wandb']
+
+    if not wandb_config['enabled']:
+        return None
+
+    # Generate run name if not provided
+    run_name = wandb_config.get('name')
+    if run_name is None:
+        task = config['training']['task_type']
+        strategy = config['training']['routing_strategy']
+        run_name = f"codking-{task}-{strategy}"
+
+    logger = WandbLogger(
+        project=wandb_config['project'],
+        entity=wandb_config.get('entity'),
+        name=run_name,
+        tags=wandb_config.get('tags', []),
+        log_model=True,
+        save_dir=wandb_config['save_dir']
+    )
+
+    # Log configuration
+    logger.experiment.config.update(config)
+
+    return logger
+
+
+def create_lightning_module(config: dict) -> pl.LightningModule:
+    """Create Lightning module from config."""
+    training_config = config['training']
+
+    # Check if cybersecurity task
+    if 'cybersecurity' in config and config['cybersecurity'].get('task_type'):
+        print(f"Creating Cybersecurity Lightning Module for {config['cybersecurity']['task_type']}")
+        module = CybersecurityLightningModule(
+            task_type=config['cybersecurity']['task_type'],
+            routing_strategy=training_config['routing_strategy'],
+            freeze_hnet=training_config['freeze_hnet'],
+            loss_weight_hnet=training_config['loss_weight_hnet'],
+            loss_weight_hrm=training_config['loss_weight_hrm'],
+            learning_rate=training_config['learning_rate'],
+            weight_decay=training_config['weight_decay'],
+            warmup_steps=training_config['warmup_steps'],
+            max_steps=training_config['max_steps'],
+            gradient_clip_val=training_config['gradient_clip_val'],
+            track_efficiency=training_config['track_efficiency'],
+            num_training_examples=training_config['num_training_examples'],
+            use_wandb=config['wandb']['enabled'],
+            log_every_n_steps=config['wandb']['log_every_n_steps']
+        )
+    else:
+        print(f"Creating Standard Lightning Module for {training_config['task_type']}")
+        module = CodKingLightningModule(
+            task_type=training_config['task_type'],
+            num_classes=training_config['num_classes'],
+            routing_strategy=training_config['routing_strategy'],
+            freeze_hnet=training_config['freeze_hnet'],
+            loss_weight_hnet=training_config['loss_weight_hnet'],
+            loss_weight_hrm=training_config['loss_weight_hrm'],
+            learning_rate=training_config['learning_rate'],
+            weight_decay=training_config['weight_decay'],
+            warmup_steps=training_config['warmup_steps'],
+            max_steps=training_config['max_steps'],
+            gradient_clip_val=training_config['gradient_clip_val'],
+            track_efficiency=training_config['track_efficiency'],
+            num_training_examples=training_config['num_training_examples'],
+            use_wandb=config['wandb']['enabled'],
+            log_every_n_steps=config['wandb']['log_every_n_steps']
+        )
+
+    return module
+
+
+def create_data_module(config: dict, train_data=None, val_data=None, test_data=None,
+                       train_labels=None, val_labels=None, test_labels=None) -> CodKingDataModule:
+    """Create DataModule from config."""
+    data_config = config['data']
+
+    data_module = CodKingDataModule(
+        train_data=train_data,
+        val_data=val_data,
+        test_data=test_data,
+        train_labels=train_labels,
+        val_labels=val_labels,
+        test_labels=test_labels,
+        dataset_type=data_config['dataset_type'],
+        max_length=data_config['max_length'],
+        encoding=data_config.get('encoding', 'utf-8'),
+        use_augmentation=data_config['use_augmentation'],
+        augmentation_factor=data_config['augmentation_factor'],
+        noise_level=data_config['noise_level'],
+        dropout_prob=data_config['dropout_prob'],
+        swap_prob=data_config['swap_prob'],
+        batch_size=data_config['batch_size'],
+        num_workers=data_config['num_workers'],
+        pin_memory=data_config['pin_memory']
+    )
+
+    return data_module
+
+
+def main():
+    """Main training function."""
+    # Parse arguments
+    parser = argparse.ArgumentParser(description='Train CodKing model')
+    parser.add_argument('--config', type=str, default='configs/training_config.yaml',
+                       help='Path to training configuration file')
+    parser.add_argument('--data-dir', type=str, default=None,
+                       help='Override data directory')
+    parser.add_argument('--checkpoint', type=str, default=None,
+                       help='Resume from checkpoint')
+    parser.add_argument('--test-only', action='store_true',
+                       help='Only run testing (requires checkpoint)')
+    parser.add_argument('--fast-dev-run', action='store_true',
+                       help='Fast development run (1 batch)')
+
+    args = parser.parse_args()
+
+    # Load configuration
+    print(f"Loading configuration from {args.config}")
+    config = load_config(args.config)
+
+    # Override data directory if provided
+    if args.data_dir:
+        config['paths']['data_dir'] = args.data_dir
+
+    # Override checkpoint if provided
+    if args.checkpoint:
+        config['resume']['enabled'] = True
+        config['resume']['checkpoint_path'] = args.checkpoint
+
+    # Create directories
+    Path(config['paths']['checkpoint_dir']).mkdir(parents=True, exist_ok=True)
+    Path(config['paths']['log_dir']).mkdir(parents=True, exist_ok=True)
+    if config['wandb']['enabled']:
+        Path(config['wandb']['save_dir']).mkdir(parents=True, exist_ok=True)
+
+    # Print configuration
+    print("\n" + "="*80)
+    print("CodKing Training Configuration")
+    print("="*80)
+    print(f"Task: {config['training']['task_type']}")
+    print(f"Routing: {config['training']['routing_strategy']}")
+    print(f"Batch size: {config['data']['batch_size']}")
+    print(f"Max epochs: {config['training']['max_epochs']}")
+    print(f"Learning rate: {config['training']['learning_rate']}")
+    print(f"Augmentation: {config['data']['use_augmentation']} (factor: {config['data']['augmentation_factor']}×)")
+    print(f"W&B: {config['wandb']['enabled']}")
+    print("="*80 + "\n")
+
+    # NOTE: In a real implementation, you would load actual data here
+    # For now, we'll show the structure with synthetic data
+    print("⚠️  NOTE: Using synthetic data for demonstration")
+    print("   In production, load your actual dataset here\n")
+
+    # Generate synthetic data (REPLACE THIS WITH YOUR ACTUAL DATA LOADING)
+    import numpy as np
+
+    num_train = 100  # With 10× augmentation → 1000 examples
+    num_val = 50
+    num_test = 50
+    num_classes = config['training']['num_classes']
+
+    train_texts = [f"Training example {i} with some content. " * 20 for i in range(num_train)]
+    val_texts = [f"Validation example {i}. " * 20 for i in range(num_val)]
+    test_texts = [f"Test example {i}. " * 20 for i in range(num_test)]
+
+    train_labels = np.random.randint(0, num_classes, num_train).tolist()
+    val_labels = np.random.randint(0, num_classes, num_val).tolist()
+    test_labels = np.random.randint(0, num_classes, num_test).tolist()
+
+    # Create DataModule
+    print("Creating DataModule...")
+    data_module = create_data_module(
+        config,
+        train_data=train_texts,
+        val_data=val_texts,
+        test_data=test_texts,
+        train_labels=train_labels,
+        val_labels=val_labels,
+        test_labels=test_labels
+    )
+
+    # Create Lightning module
+    print("Creating Lightning Module...")
+    if config['resume']['enabled'] and config['resume']['checkpoint_path']:
+        print(f"Resuming from checkpoint: {config['resume']['checkpoint_path']}")
+        lightning_module = CodKingLightningModule.load_from_checkpoint(
+            config['resume']['checkpoint_path']
+        )
+    else:
+        lightning_module = create_lightning_module(config)
+
+    # Print model summary
+    print("\n" + "="*80)
+    lightning_module.model.print_summary()
+    print("="*80 + "\n")
+
+    # Setup callbacks
+    callbacks = setup_callbacks(config)
+
+    # Setup logger
+    logger = setup_logger(config)
+
+    # Create trainer
+    trainer = pl.Trainer(
+        max_epochs=config['training']['max_epochs'],
+        max_steps=config['training']['max_steps'],
+        accelerator=config['hardware']['accelerator'],
+        devices=config['hardware']['devices'],
+        precision=config['hardware']['precision'],
+        strategy=config['hardware']['strategy'],
+        gradient_clip_val=config['training']['gradient_clip_val'],
+        accumulate_grad_batches=config['training']['accumulate_grad_batches'],
+        callbacks=callbacks,
+        logger=logger,
+        log_every_n_steps=config['wandb']['log_every_n_steps'],
+        deterministic=False,
+        fast_dev_run=args.fast_dev_run,
+        enable_progress_bar=True,
+        enable_model_summary=True
+    )
+
+    # Training
+    if not args.test_only:
+        print("\n" + "="*80)
+        print("Starting Training")
+        print("="*80 + "\n")
+
+        trainer.fit(
+            lightning_module,
+            datamodule=data_module,
+            ckpt_path=config['resume']['checkpoint_path'] if config['resume']['enabled'] else None
+        )
+
+        print("\n" + "="*80)
+        print("Training Complete!")
+        print("="*80 + "\n")
+
+        # Print best metrics
+        if hasattr(trainer.checkpoint_callback, 'best_model_path'):
+            print(f"Best model: {trainer.checkpoint_callback.best_model_path}")
+            print(f"Best {config['training']['monitor']}: {trainer.checkpoint_callback.best_model_score:.4f}")
+
+    # Testing
+    print("\n" + "="*80)
+    print("Starting Testing")
+    print("="*80 + "\n")
+
+    if args.test_only and args.checkpoint:
+        # Load best checkpoint for testing
+        lightning_module = CodKingLightningModule.load_from_checkpoint(args.checkpoint)
+
+    test_results = trainer.test(
+        lightning_module,
+        datamodule=data_module
+    )
+
+    print("\n" + "="*80)
+    print("Test Results")
+    print("="*80)
+    for key, value in test_results[0].items():
+        print(f"  {key}: {value:.4f}")
+    print("="*80 + "\n")
+
+    # Check if efficiency targets met
+    if config['training']['track_efficiency']:
+        targets = config['targets']
+        test_res = test_results[0]
+
+        print("\n" + "="*80)
+        print("Efficiency Target Analysis")
+        print("="*80)
+
+        if 'test/accuracy' in test_res:
+            acc = test_res['test/accuracy']
+            met = "✓" if acc >= targets['min_accuracy'] else "✗"
+            print(f"  Accuracy: {acc:.2%} (target: {targets['target_accuracy']:.2%}) {met}")
+
+        if 'test/latency_ms' in test_res:
+            lat = test_res['test/latency_ms']
+            met = "✓" if lat <= targets['max_latency_ms'] else "✗"
+            print(f"  Latency: {lat:.2f}ms (max: {targets['max_latency_ms']}ms) {met}")
+
+        if 'test/efficiency_vs_deepseek' in test_res:
+            eff = test_res['test/efficiency_vs_deepseek']
+            met = "✓" if eff >= targets['min_efficiency_vs_sota'] else "✗"
+            print(f"  Parameter efficiency: {eff:.1f}× (target: {targets['target_efficiency_vs_sota']}×) {met}")
+
+        print("="*80 + "\n")
+
+    # Finish W&B run
+    if config['wandb']['enabled'] and wandb.run is not None:
+        wandb.finish()
+
+    print("Training script completed successfully! 🚀")
+
+
+if __name__ == "__main__":
+    main()

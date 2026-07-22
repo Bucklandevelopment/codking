@@ -1,0 +1,89 @@
+# CodKing Integration Configuration
+# HRM + H-Net Hybrid System for Cybersecurity Data Processing
+
+integration:
+  # Pipeline Configuration
+  pipeline:
+    name: "codking-cybersec"
+    description: "Efficient reasoning AI for cybersecurity threat analysis"
+
+  # Chunk Routing Strategy
+  routing:
+    strategy: "variance"  # Options: "variance", "temporal", "learned"
+    variance_threshold: "median"  # Use median variance as threshold
+
+    # Alternative strategies (if not using variance)
+    temporal:
+      h_module_positions: ["start", "end"]  # Global context
+      l_module_positions: ["middle"]  # Local processing
+
+    learned:
+      router_hidden_dim: 512
+      use_gumbel_softmax: true
+      temperature: 1.0
+
+  # Two-Level Adaptive Computation
+  adaptive_computation:
+    # Spatial adaptation (H-Net)
+    spatial:
+      dynamic_boundaries: true
+      complexity_estimation: "entropy"  # Options: "variance", "entropy", "boundary_density"
+
+    # Temporal adaptation (HRM ACT)
+    temporal:
+      base_cycles: 8
+      max_cycles: 16
+      complexity_scale_factor: 0.5  # Additional cycles based on complexity
+
+  # Training Strategy
+  training:
+    mode: "joint"  # Options: "joint", "staged", "frozen_hnet"
+
+    staged:  # If mode == "staged"
+      phase1: "train_hnet"
+      phase2: "freeze_hnet_train_hrm"
+      phase3: "joint_finetune"
+
+    frozen_hnet:  # If mode == "frozen_hnet"
+      use_pretrained: true
+      pretrained_path: "cartesia-ai/hnet_1stage_L"
+
+# Cybersecurity-Specific Configuration
+cybersecurity:
+  # Data Processing
+  input_format: "bytes"  # Raw byte streams (logs, packets, etc.)
+  max_sequence_length: 8192  # Bytes
+
+  # Use Cases
+  tasks:
+    - "threat_detection"
+    - "anomaly_detection"
+    - "log_analysis"
+    - "osint_processing"
+
+  # Screening Strategy (Hybrid Approach)
+  screening:
+    use_hybrid: true  # CodKing screens, SOTA analyzes suspicious
+    screening_threshold: 0.99  # Route top 1% to deep analysis
+    deep_analysis_model: "gpt-4"  # For suspicious cases
+
+# Performance Targets
+targets:
+  # Accuracy (Cybersecurity Benchmarks)
+  log_anomaly_detection_recall: 0.95  # 95% recall
+  intrusion_detection_accuracy: 0.90  # 90% accuracy
+  screening_latency_ms: 10  # <10ms per event
+
+  # Efficiency
+  throughput_events_per_sec: 100000  # 100K events/sec screening
+  cost_reduction: 0.99  # 99% cost reduction vs full SOTA
+
+# Deployment Configuration
+deployment:
+  mode: "edge"  # Options: "edge", "cloud", "embedded"
+  quantization: "int8"  # Options: "fp16", "int8", "none"
+  export_format: "onnx"  # Options: "onnx", "torchscript"
+  api:
+    enabled: true
+    framework: "fastapi"
+    endpoint: "/predict"

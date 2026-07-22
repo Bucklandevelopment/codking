@@ -1,0 +1,118 @@
+# Training Configuration for CodKing
+# Optimized for few-shot learning with 1000 examples
+
+training:
+  # Task configuration
+  task_type: "classification"  # classification, detection, generation
+  num_classes: 10
+
+  # Model configuration
+  routing_strategy: "variance"  # variance (recommended), temporal, learned
+  freeze_hnet: false  # Set to true to only train HRM
+  loss_weight_hnet: 0.3
+  loss_weight_hrm: 0.7
+
+  # Optimizer configuration
+  learning_rate: 1.0e-4
+  weight_decay: 0.1
+  warmup_steps: 1000
+  max_steps: 50000
+  gradient_clip_val: 1.0
+
+  # Training configuration
+  batch_size: 32
+  max_epochs: 100
+  accumulate_grad_batches: 1  # Gradient accumulation
+
+  # Efficiency tracking
+  track_efficiency: true
+  num_training_examples: 1000  # For APTE computation
+
+  # Checkpoint configuration
+  save_top_k: 3
+  monitor: "val/accuracy"
+  mode: "max"
+  save_every_n_epochs: 5
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: "val/loss"
+    mode: "min"
+
+# Data configuration
+data:
+  dataset_type: "text"  # byte, text, cybersecurity
+  max_length: 8192
+  encoding: "utf-8"
+
+  # Few-shot augmentation (CRITICAL for 1000 examples)
+  use_augmentation: true
+  augmentation_factor: 10  # 100 examples → 1000 with augmentation
+  noise_level: 0.01
+  dropout_prob: 0.05
+  swap_prob: 0.05
+
+  # DataLoader
+  batch_size: 32
+  num_workers: 4
+  pin_memory: true
+
+# W&B configuration
+wandb:
+  enabled: true
+  project: "codking"
+  entity: null  # Set to your W&B entity
+  name: null  # Auto-generated if null
+  tags:
+    - "hrm"
+    - "hnet"
+    - "efficiency"
+    - "few-shot"
+  log_every_n_steps: 50
+  save_dir: "./wandb_logs"
+
+# Hardware configuration
+hardware:
+  accelerator: "auto"  # auto, gpu, cpu, tpu
+  devices: "auto"  # auto, 1, 2, etc.
+  precision: "16-mixed"  # 32, 16-mixed, bf16-mixed
+  strategy: "auto"  # auto, ddp, ddp_find_unused_parameters_true
+
+# Paths
+paths:
+  data_dir: "./data"
+  checkpoint_dir: "./checkpoints"
+  log_dir: "./logs"
+
+# Cybersecurity-specific configuration
+cybersecurity:
+  task_type: "threat_detection"  # threat_detection, anomaly_detection, osint_screening
+  target_recall: 0.95  # High recall for security
+  max_false_positive_rate: 0.01  # Low FPR
+  cost_per_false_positive: 1.0
+  cost_per_false_negative: 100.0  # Missing threats is expensive
+
+# Efficiency targets
+targets:
+  # Performance
+  min_accuracy: 0.70  # 70% minimum accuracy
+  target_accuracy: 0.85  # 85% target accuracy
+
+  # Efficiency
+  max_latency_ms: 10.0
+  min_compression_ratio: 5.0  # 5:1 compression minimum
+  target_compression_ratio: 6.0  # 6:1 target
+
+  # Parameter efficiency
+  min_efficiency_vs_sota: 50.0  # 50× minimum
+  target_efficiency_vs_sota: 150.0  # 150× target
+
+  # Memory
+  max_memory_mb: 500.0  # 500MB maximum
+
+# Resume training
+resume:
+  enabled: false
+  checkpoint_path: null  # Path to checkpoint to resume from

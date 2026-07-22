@@ -1,0 +1,21 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Env / secrets
+.env
+.env.local
+
+# DB / models / data
+*.db
+*.sqlite3
+*.pkl
+*.joblib
+
+# macOS
+.DS_Store

@@ -1,0 +1,79 @@
+# HRM (Hierarchical Reasoning Model) Configuration
+# O(1) Memory Reasoning with Adaptive Computation Time
+
+hrm:
+  # Input/Output Networks
+  input_network:
+    input_dim: 1536  # From H-Net main output
+    hidden_dim: 512
+    activation: "gelu"
+
+  output_network:
+    hidden_dim: 512
+    output_dim: 512  # Task-specific (adjust for cybersecurity use case)
+    activation: "gelu"
+
+  # H-Module (Slow, Abstract Planning)
+  h_module:
+    num_layers: 4
+    hidden_dim: 512
+    num_heads: 8
+    dim_head: 64
+    dropout: 0.1
+    use_post_norm: true  # RMSNorm after each layer
+    activation: "gelu"
+
+  # L-Module (Fast, Detailed Computation)
+  l_module:
+    num_layers: 4
+    hidden_dim: 512
+    num_heads: 8
+    dim_head: 64
+    dropout: 0.1
+    use_post_norm: true  # RMSNorm after each layer
+    activation: "gelu"
+
+  # Hierarchical Recurrence
+  recurrence:
+    l_cycles: 8  # T timesteps per H-cycle
+    h_cycles_max: 16  # M maximum segments
+    h_cycles_min: 4  # Minimum cycles before ACT can halt
+
+  # Adaptive Computation Time (ACT)
+  act:
+    enabled: true  # CRITICAL during inference
+    q_head_dim: 2  # [Q_halt, Q_continue]
+    q_loss_weight: 0.1  # Weight for Q-learning loss
+    halt_threshold: 0.0  # Q_halt > Q_continue threshold
+    exploration_epsilon: 0.1  # For training
+
+  # Deep Equilibrium Models (DEQ)
+  deq:
+    use_one_step_gradient: true  # O(1) memory approximation
+    detach_intermediate_states: true
+
+  # Deep Supervision
+  deep_supervision:
+    enabled: true
+    num_segments: 4  # Number of segments for supervision
+    segment_loss_weight: "uniform"  # or "decay"
+
+  # Initialization
+  initialization:
+    method: "truncated_normal"
+    sigma: 1.0
+    truncation: 2.0
+
+# Training Configuration for HRM
+training:
+  optimizer: "AdamW"
+  lr: 1e-4
+  weight_decay: 0.1
+  gradient_clip: 1.0
+  batch_size: 32
+
+# Efficiency Targets
+efficiency:
+  parameter_count: 27_000_000  # 27M parameters target
+  inference_latency_ms: 10  # <10ms target
+  memory_footprint_mb: 100  # <100MB target

@@ -1,0 +1,160 @@
+# mHC (Manifold-Constrained Hyper-Connections) Configuration
+# Based on: https://arxiv.org/abs/2512.24880 (DeepSeek-AI)
+#
+# mHC improves training stability by projecting residual mixing matrices
+# onto the Birkhoff polytope (doubly stochastic matrices).
+
+# Enable/disable mHC
+enabled: true
+
+# Core mHC parameters
+mhc:
+  # Number of parallel streams for hyper-connections
+  # Default: 4 (as used in DeepSeek paper)
+  # Higher values = more capacity but more parameters
+  n_streams: 4
+
+  # Sinkhorn-Knopp projection settings
+  sinkhorn:
+    # Number of iterations for projection
+    # More iterations = more accurate projection but slower
+    # Default: 5 (paper recommendation)
+    iterations: 5
+
+    # Numerical stability epsilon
+    eps: 1.0e-8
+
+    # Temperature for softmax (lower = sharper)
+    # Default: 1.0
+    tau: 1.0
+
+  # Initialization
+  initialization:
+    # Scale of noise added to identity initialization
+    # Small values = more stable start, larger = more exploration
+    init_scale: 0.1
+
+    # Whether to initialize mixing matrices near identity
+    # Strongly recommended for stability
+    identity_init: true
+
+# Where to apply mHC
+apply_to:
+  # H-Net Main Network (22 layers) - PRIMARY TARGET
+  # This is where mHC provides maximum benefit
+  hnet_main_network: true
+
+  # HRM H-module (4 layers) - OPTIONAL
+  # Moderate benefit for hierarchical reasoning
+  hrm_h_module: false
+
+  # HRM L-module (4 layers) - OPTIONAL
+  # Moderate benefit for local processing
+  hrm_l_module: false
+
+  # H-Net Encoder (4 layers) - NOT RECOMMENDED
+  # Encoder uses Mamba-2/LSTM, mHC designed for Transformers
+  hnet_encoder: false
+
+  # H-Net Decoder (4 layers) - NOT RECOMMENDED
+  # Similar to encoder
+  hnet_decoder: false
+
+# Training stability settings
+training:
+  # Warmup for mHC matrices
+  # Gradually increases influence of learned mixing
+  warmup:
+    enabled: true
+    # Number of steps to reach full mHC effect
+    warmup_steps: 1000
+    # Interpolation schedule: 'linear', 'cosine', 'exponential'
+    schedule: "linear"
+
+  # Gradient clipping for mHC parameters specifically
+  gradient_clip:
+    enabled: true
+    max_norm: 1.0
+
+  # Learning rate multiplier for mHC parameters
+  # Lower than base LR can help stability
+  lr_multiplier: 1.0
+
+# Regularization
+regularization:
+  # Orthogonality regularization
+  # Encourages diverse stream mixing (prevents collapse)
+  orthogonality:
+    enabled: true
+    weight: 0.01
+
+  # Entropy regularization
+  # Encourages non-uniform mixing (prevents identity collapse)
+  entropy:
+    enabled: false
+    weight: 0.001
+
+  # Sparsity regularization
+  # Encourages sparse mixing patterns
+  sparsity:
+    enabled: false
+    weight: 0.0001
+
+# Monitoring and logging
+monitoring:
+  # Log mHC-specific metrics
+  log_metrics: true
+
+  # Frequency of logging (steps)
+  log_frequency: 100
+
+  # Metrics to track
+  metrics:
+    - doubly_stochastic_loss  # How close H_res is to DS
+    - orthogonality_loss       # Diversity of streams
+    - gradient_norm            # mHC gradient magnitude
+    - mixing_entropy           # Entropy of mixing matrices
+
+# Performance settings
+performance:
+  # Use fused operations where possible
+  fused_operations: true
+
+  # Memory optimization
+  checkpoint_mhc: false  # Gradient checkpointing for mHC layers
+
+  # Expected overhead (for reference)
+  expected_overhead_percent: 6.7
+
+# Model variants (for ablation studies)
+variants:
+  # Standard mHC (recommended)
+  standard:
+    n_streams: 4
+    sinkhorn_iterations: 5
+    apply_to_main_network: true
+
+  # Lightweight mHC (lower overhead)
+  lightweight:
+    n_streams: 2
+    sinkhorn_iterations: 3
+    apply_to_main_network: true
+
+  # Full mHC (maximum capacity)
+  full:
+    n_streams: 8
+    sinkhorn_iterations: 7
+    apply_to_main_network: true
+    apply_to_hrm: true
+
+# Network configuration (matches H-Net Main Network)
+network:
+  num_layers: 22
+  d_model: 1536
+  num_heads: 12
+  dim_head: 128
+  dim_ff: 6144  # 4 * d_model
+  dropout: 0.1
+  input_dim: 1024
+  max_seq_len: 2048
+  use_rms_norm: true

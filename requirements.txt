@@ -1,0 +1,65 @@
+# CodKing - HRM+H-Net Hybrid Model for Cybersecurity Data Processing
+# Core Engine Dependencies
+
+# Deep Learning Framework
+torch==2.7.0
+# torchvision and torchaudio are NOT needed for inference (no codking source
+# imports them). Installing torchvision alongside CPU-only torch causes a
+# circular-import crash (torchvision.extension AttributeError via torchmetrics).
+# Uncomment only for local training environments with matching CUDA torch:
+# torchvision==0.22.0
+# torchaudio==2.7.0
+
+# Efficient Attention & SSM
+flash-attn>=2.6.0
+# mamba-ssm - install from source: pip install mamba-ssm
+
+# Numerical Computing
+numpy>=1.26.0
+scipy>=1.10.0
+
+# Training & Experiment Tracking
+pytorch-lightning>=2.0.0
+wandb>=0.15.0
+
+# MCP Framework (Optional for multi-agent orchestration)
+fastmcp>=0.1.0
+mcp>=1.0.0
+
+# Configuration & Utilities
+pyyaml>=6.0
+hydra-core>=1.3.0
+python-dotenv>=1.0.0
+
+# Evaluation & Metrics
+scikit-learn>=1.3.0
+datasets>=2.14.0
+transformers>=4.35.0
+
+# API & Deployment
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.4.0
+pydantic-settings>=2.0.0
+requests>=2.31.0
+httpx>=0.25.0
+aiohttp>=3.9.0
+python-multipart>=0.0.6  # For file uploads
+gunicorn>=21.2.0  # Production server
+redis>=5.0.0  # vital-core event bus (Redis Pub/Sub)
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+tensorboard>=2.15.0
+
+# Development & Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.11.0
+flake8>=6.1.0
+mypy>=1.7.0
+
+# CUDA Requirements:
+# - CUDA 12.6+ required
+# - Install PyTorch with: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126

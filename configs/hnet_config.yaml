@@ -1,0 +1,60 @@
+# H-Net Architecture Configuration
+# Dynamic Chunking for Hierarchical Sequence Modeling
+
+hnet:
+  # Encoder Configuration (Mamba-2 SSM)
+  encoder:
+    num_layers: 4
+    d_model: 1024
+    d_state: 64
+    d_conv: 4
+    expand_factor: 2
+
+  # Dynamic Chunking Configuration
+  chunking:
+    target_ratio: 6  # 6:1 compression (8192 bytes → ~1365 chunks)
+    routing:
+      use_cosine_similarity: true
+      boundary_threshold: 0.5
+    smoothing:
+      enabled: true  # CRITICAL - 10% performance drop without it
+      ema_momentum: 0.9
+    upsampling:
+      use_ste: true  # Straight-Through Estimator
+
+  # Main Network Configuration (Transformer)
+  main:
+    num_layers: 22
+    d_model: 1536
+    num_heads: 12
+    dim_head: 128
+    dropout: 0.1
+    use_flash_attention: true
+    activation: "gelu"
+
+  # Decoder Configuration (Mamba-2 SSM)
+  decoder:
+    num_layers: 4
+    d_model: 1024
+    d_state: 64
+    d_conv: 4
+
+  # Loss Configuration
+  loss:
+    ratio_loss_weight: 0.03  # α in L_total = L_AR + α·L_ratio
+
+# Training Configuration for H-Net
+training:
+  optimizer: "AdamW"
+  lr: 1e-4
+  weight_decay: 0.1
+  warmup_steps: 1000
+  max_steps: 50000
+  batch_size: 32
+  gradient_clip: 1.0
+  mixed_precision: true  # FP16/BF16
+
+# Efficiency Targets
+efficiency:
+  compression_ratio: 6.0  # 6:1 compression
+  target_bpb: 0.743  # Bits per byte (target)
